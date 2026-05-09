@@ -55,13 +55,43 @@ object OkHttpPatch {
         if (!ApplicationDelegate.attached())
             return false
         Logger.debug { "OkHttpPatch.shouldHook, code: $code, url: ${url.safeContent}" }
-        return (code == 200 && Settings.Debug()) || hooks.any { it.shouldHook(url, code) }
+        return try {
+            (code == 200 && Settings.Debug()) || hooks.any { hook ->
+                try {
+                    hook.shouldHook(url, code)
+                } catch (t: Throwable) {
+                    Logger.error(t) {
+                        "OkHttpPatch.shouldHook failed, code: $code, url: ${url.safeContent}, hook: ${hook.javaClass.name}"
+                    }
+                    false
+                }
+            }
+        } catch (t: Throwable) {
+            Logger.error(t) { "OkHttpPatch.shouldHook fallback, code: $code, url: ${url.safeContent}" }
+            false
+        }
     }
 
     @JvmStatic
     fun hook(url: String, code: Int, request: String, response: String): String {
-        return hooks.firstOrNull { it.shouldHook(url, code) }
-            ?.hook(url, code, request, response) ?: response
+        val hook = hooks.firstOrNull {
+            try {
+                it.shouldHook(url, code)
+            } catch (t: Throwable) {
+                Logger.error(t) {
+                    "OkHttpPatch.hook shouldHook failed, code: $code, url: ${url.safeContent}, hook: ${it.javaClass.name}"
+                }
+                false
+            }
+        } ?: return response
+        return try {
+            hook.hook(url, code, request, response)
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "OkHttpPatch.hook fallback, code: $code, url: ${url.safeContent}, hook: ${hook.javaClass.name}"
+            }
+            response
+        }
     }
 
     @Keep
@@ -74,24 +104,31 @@ object OkHttpPatch {
         respEncoding: String?,
         respStream: InputStream
     ): String {
-        val request = if (reqStream.available() == 0) {
+        return try {
+            val request = if (reqStream.available() == 0) {
+                ""
+            } else (when (reqEncoding) {
+                "gzip" -> GZIPInputStream(reqStream)
+                "deflate" -> InflaterInputStream(reqStream)
+                "br" -> BrotliInputStream(reqStream)
+                else -> reqStream
+            }).bufferedReader().use { it.readText() }
+            val response = (when (respEncoding) {
+                "gzip" -> GZIPInputStream(respStream)
+                "deflate" -> InflaterInputStream(respStream)
+                "br" -> BrotliInputStream(respStream)
+                else -> respStream
+            }).bufferedReader().use { it.readText() }
+            Logger.debug { "OkHttpPatch.hook, code: $code, url: ${url.safeContent}" }
+            Logger.debug { "OkHttpPatch.hook, request, encoding: $reqEncoding, content: ${request.safeContent}" }
+            Logger.debug { "OkHttpPatch.hook, response, encoding: $respEncoding, content: ${response.safeContent}" }
+            hook(url, code, request, response)
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "OkHttpPatch.hook stream fallback, code: $code, url: ${url.safeContent}, respEncoding: $respEncoding"
+            }
             ""
-        } else (when (reqEncoding) {
-            "gzip" -> GZIPInputStream(reqStream)
-            "deflate" -> InflaterInputStream(reqStream)
-            "br" -> BrotliInputStream(reqStream)
-            else -> reqStream
-        }).bufferedReader().use { it.readText() }
-        val response = (when (respEncoding) {
-            "gzip" -> GZIPInputStream(respStream)
-            "deflate" -> InflaterInputStream(respStream)
-            "br" -> BrotliInputStream(respStream)
-            else -> respStream
-        }).bufferedReader().use { it.readText() }
-        Logger.debug { "OkHttpPatch.hook, code: $code, url: ${url.safeContent}" }
-        Logger.debug { "OkHttpPatch.hook, request, encoding: $reqEncoding, content: ${request.safeContent}" }
-        Logger.debug { "OkHttpPatch.hook, response, encoding: $respEncoding, content: ${response.safeContent}" }
-        return hook(url, code, request, response)
+        }
     }
 
     @Keep
@@ -99,7 +136,23 @@ object OkHttpPatch {
     fun hookBefore(url: String, headers: Array<String>): Pair<String, Array<String>> {
         if (!ApplicationDelegate.attached())
             return Pair.create(url, headers)
-        return hooks.find { it.shouldHookBefore(url, headers) }
-            ?.hookBefore(url, headers) ?: Pair.create(url, headers)
+        val hook = hooks.find {
+            try {
+                it.shouldHookBefore(url, headers)
+            } catch (t: Throwable) {
+                Logger.error(t) {
+                    "OkHttpPatch.hookBefore shouldHook failed, url: ${url.safeContent}, hook: ${it.javaClass.name}"
+                }
+                false
+            }
+        } ?: return Pair.create(url, headers)
+        return try {
+            hook.hookBefore(url, headers)
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "OkHttpPatch.hookBefore fallback, url: ${url.safeContent}, hook: ${hook.javaClass.name}"
+            }
+            Pair.create(url, headers)
+        }
     }
 }

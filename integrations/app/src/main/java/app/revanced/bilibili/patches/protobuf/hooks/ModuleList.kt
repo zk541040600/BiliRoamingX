@@ -1,7 +1,6 @@
 package app.revanced.bilibili.patches.protobuf.hooks
 
 import app.revanced.bilibili.patches.protobuf.MossHook
-import app.revanced.bilibili.settings.Settings
 import com.bapis.bilibili.app.resource.v1.ListReply
 import com.bapis.bilibili.app.resource.v1.ListReq
 import com.bilibili.lib.moss.api.MossException
@@ -13,9 +12,6 @@ object ModuleList : MossHook<ListReq, ListReply>() {
     }
 
     override fun hookAfter(req: ListReq, reply: ListReply?, error: MossException?): ListReply? {
-        if (Settings.DelayDownloadModules() && (req.lite > 0
-                    || (req.poolName == "feOffline" && req.moduleName.isEmpty()))
-        ) reply?.clearPools()
         return super.hookAfter(req, reply, error)
     }
 }

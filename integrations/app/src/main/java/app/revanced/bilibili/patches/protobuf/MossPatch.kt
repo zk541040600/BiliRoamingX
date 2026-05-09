@@ -73,7 +73,17 @@ object MossPatch {
     @Keep
     @JvmStatic
     fun hookBlockingBefore(req: GeneratedMessageLite<*, *>): Any? {
-        return hooks.firstOrNull { it.shouldHook(req) }?.hookBefore(req)
+        val hook = findHookSafely(req) ?: return null
+        return try {
+            hook.hookBefore(req)
+        } catch (e: MossException) {
+            throw e
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "MossPatch.hookBlockingBefore fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+            }
+            null
+        }
     }
 
     /**
@@ -88,9 +98,23 @@ object MossPatch {
         reply: GeneratedMessageLite<*, *>?,
         error: MossException?
     ): GeneratedMessageLite<*, *>? {
-        MossDebugPrinter.printBlocking(req, reply, error)
-        return hooks.firstOrNull { it.shouldHook(req) }?.hookAfter(req, reply, error)
-            ?: if (error != null) throw error else reply
+        runCatching {
+            MossDebugPrinter.printBlocking(req, reply, error)
+        }.onFailure {
+            Logger.error(it) { "MossPatch.hookBlockingAfter debug print failed, req: ${req.javaClass.name}" }
+        }
+        val hook = findHookSafely(req) ?: return if (error != null) throw error else reply
+        val hooked = try {
+            hook.hookAfter(req, reply, error)
+        } catch (e: MossException) {
+            throw e
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "MossPatch.hookBlockingAfter fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+            }
+            return if (error != null) throw error else reply
+        }
+        return hooked ?: if (error != null) throw error else reply
     }
 
     /**
@@ -105,8 +129,13 @@ object MossPatch {
         handler: MossResponseHandler<Any?>?
     ): Any? {
         if (handler == null) return null
-        val finalHandler = MossDebugPrinter.printAsync(req, handler)
-        val hook = hooks.firstOrNull { it.shouldHook(req) }
+        val finalHandler = runCatching {
+            MossDebugPrinter.printAsync(req, handler)
+        }.getOrElse {
+            Logger.error(it) { "MossPatch.hookAsyncBefore debug print failed, req: ${req.javaClass.name}" }
+            handler
+        }
+        val hook = findHookSafely(req)
             ?: return if (Settings.Debug()) finalHandler else null
         if (hook.async) {
             Utils.async {
@@ -116,14 +145,31 @@ object MossPatch {
                     finalHandler.onCompleted()
                 } catch (e: MossException) {
                     finalHandler.onError(e)
+                } catch (t: Throwable) {
+                    Logger.error(t) {
+                        "MossPatch.hookAsyncBefore async fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+                    }
+                    finalHandler.onCompleted()
                 }
             }
             return HookFlags.STOP_EXECUTION
         } else try {
             val before = hook.hookBefore(req)
                 ?: return MossResponseHandlerProxy.get(finalHandler, { reply ->
-                    reply as GeneratedMessageLite<*, *>?
-                    hook.hookAfter(req, reply, null)
+                    try {
+                        reply as GeneratedMessageLite<*, *>?
+                        hook.hookAfter(req, reply, null) ?: reply
+                    } catch (e: MossException) {
+                        Logger.error(e) {
+                            "MossPatch.hookAsyncBefore onNext moss fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+                        }
+                        reply
+                    } catch (t: Throwable) {
+                        Logger.error(t) {
+                            "MossPatch.hookAsyncBefore onNext fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+                        }
+                        reply
+                    }
                 }, { delegate, error ->
                     try {
                         val after = hook.hookAfter(req, null, error)
@@ -131,6 +177,11 @@ object MossPatch {
                         delegate.onCompleted()
                         true
                     } catch (e: MossException) {
+                        false
+                    } catch (t: Throwable) {
+                        Logger.error(t) {
+                            "MossPatch.hookAsyncBefore onError fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+                        }
                         false
                     }
                 })
@@ -146,7 +197,25 @@ object MossPatch {
         } catch (e: MossException) {
             finalHandler.onError(e)
             return HookFlags.STOP_EXECUTION
+        } catch (t: Throwable) {
+            Logger.error(t) {
+                "MossPatch.hookAsyncBefore fallback, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+            }
+            return null
         }
+    }
+
+    private fun findHookSafely(req: GeneratedMessageLite<*, *>): MossHook<GeneratedMessageLite<*, *>, GeneratedMessageLite<*, *>>? {
+        return hooks.firstOrNull { hook ->
+            try {
+                hook.shouldHook(req)
+            } catch (t: Throwable) {
+                Logger.error(t) {
+                    "MossPatch.shouldHook failed, req: ${req.javaClass.name}, hook: ${hook.javaClass.name}"
+                }
+                false
+            }
+        } as? MossHook<GeneratedMessageLite<*, *>, GeneratedMessageLite<*, *>>
     }
 
     @Suppress("NOTHING_TO_INLINE")
@@ -163,17 +232,21 @@ object MossPatch {
     @Keep
     @JvmStatic
     fun hookBeforeRequest(url: String, headers: ArrayList<Map.Entry<String, String>>): String {
-        if (Settings.UnlockAreaLimit() && Utils.isPlay()
-            && fakeToPinkForUnlockAreaLimitApis.any { url.endsWith(it) }
-        ) fakeClient(Client.Pink, headers)
-        else if (url.endsWith(PLAY_VIEW_UNITE_API)) {
-            if (Settings.UnlockAreaLimit() && Utils.isPlay())
-                fakeClient(Client.Pink, headers)
-            if ((Utils.isPink() || Utils.isPlay()) && Settings.TrialVipQuality() && !Accounts.isEffectiveVip)
-                pinNetworkType(NetworkType.WIFI, headers)
+        try {
+            if (Settings.UnlockAreaLimit() && Utils.isPlay()
+                && fakeToPinkForUnlockAreaLimitApis.any { url.endsWith(it) }
+            ) fakeClient(Client.Pink, headers)
+            else if (url.endsWith(PLAY_VIEW_UNITE_API)) {
+                if (Settings.UnlockAreaLimit() && Utils.isPlay())
+                    fakeClient(Client.Pink, headers)
+                if ((Utils.isPink() || Utils.isPlay()) && Settings.TrialVipQuality() && !Accounts.isEffectiveVip)
+                    pinNetworkType(NetworkType.WIFI, headers)
+            }
+            if (url.endsWith(PLAY_VIEW_UNITE_API))
+                headers["authorization"] = "identify_v1 ${getFinalAccessKey(false)}"
+        } catch (t: Throwable) {
+            Logger.error(t) { "MossPatch.hookBeforeRequest fallback, url: ${url.safeContent}" }
         }
-        if (url.endsWith(PLAY_VIEW_UNITE_API))
-            headers["authorization"] = "identify_v1 ${getFinalAccessKey(false)}"
         return url
     }
 

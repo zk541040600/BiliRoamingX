@@ -247,7 +247,7 @@ object Settings {
     @JvmField val TextFoldDynLinesToAll =
         IntSetting(key = "text_fold_dyn_lines_to_all", defValue = Constants.DEF_DYN_LINES_TO_ALL)
     @JvmField val DelayDownloadModules =
-        BooleanSetting(key = "delay_download_modules", defValue = true, onChange = { value, async ->
+        BooleanSetting(key = "delay_download_modules", defValue = false, onChange = { value, async ->
             if (value) if (async) {
                 Utils.async { deleteModuleResources() }
             } else {

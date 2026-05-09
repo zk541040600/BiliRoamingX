@@ -11,6 +11,7 @@ import android.widget.TextView
 import androidx.annotation.Keep
 import app.revanced.bilibili.patches.main.ApplicationDelegate
 import app.revanced.bilibili.settings.Settings
+import app.revanced.bilibili.utils.Logger
 import app.revanced.bilibili.utils.Reflex
 import app.revanced.bilibili.utils.Utils
 import app.revanced.bilibili.utils.children
@@ -70,64 +71,98 @@ object PlaybackSpeedPatch {
     @Keep
     @JvmStatic
     fun defaultSpeed(player: IMediaPlayer?, speed: Float): Float {
-        // only apply to video, not apply to podcast
-        if (player != null && player.videoSarNum <= 0) return speed
-        val newSpeed = if (playerCache.get() !== player || ApplicationDelegate.getTopActivity() is StoryVideoActivity) {
-            defaultSpeed(speed)
-        } else speed
-        playerCache = WeakReference(player)
-        return newSpeed
+        return try {
+            // only apply to video, not apply to podcast
+            if (player != null && player.videoSarNum <= 0) return speed
+            val newSpeed = if (playerCache.get() !== player || ApplicationDelegate.getTopActivity() is StoryVideoActivity) {
+                defaultSpeed(speed)
+            } else speed
+            playerCache = WeakReference(player)
+            newSpeed
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.defaultSpeed fallback" }
+            speed
+        }
     }
 
     @Keep
     @JvmStatic
     fun defaultSpeed(speed: Float): Float {
-        val defaultSpeed = Settings.DefaultPlaybackSpeed()
-        return if (Settings.RememberPlaybackSpeed()) {
-            val selectedSpeed = Settings.SelectedPlaybackSpeed()
-            if (selectedSpeed == 0f && defaultSpeed != 0f) {
+        return try {
+            val defaultSpeed = Settings.DefaultPlaybackSpeed()
+            if (Settings.RememberPlaybackSpeed()) {
+                val selectedSpeed = Settings.SelectedPlaybackSpeed()
+                if (selectedSpeed == 0f && defaultSpeed != 0f) {
+                    defaultSpeed
+                } else if (selectedSpeed != 0f) {
+                    selectedSpeed
+                } else speed
+            } else if (defaultSpeed != 0f) {
                 defaultSpeed
-            } else if (selectedSpeed != 0f) {
-                selectedSpeed
             } else speed
-        } else if (defaultSpeed != 0f) {
-            defaultSpeed
-        } else speed
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.defaultSpeed setting fallback" }
+            speed
+        }
     }
 
     @Keep
     @JvmStatic
     fun onPlaybackSpeedSelected(speed: Float) {
-        if (Settings.RememberPlaybackSpeed())
-            Settings.SelectedPlaybackSpeed.save(speed)
+        try {
+            if (Settings.RememberPlaybackSpeed())
+                Settings.SelectedPlaybackSpeed.save(speed)
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.onPlaybackSpeedSelected fallback" }
+        }
     }
 
     @Keep
     @JvmStatic
     fun longPressSpeed(speed: Float): Float {
-        if (speed == 2.0f || speed == 3.0f) {
-            val customSpeed = Settings.LongPressPlaybackSpeed()
-            if (customSpeed != 0f) return customSpeed
+        return try {
+            if (speed == 2.0f || speed == 3.0f) {
+                val customSpeed = Settings.LongPressPlaybackSpeed()
+                if (customSpeed != 0f) return customSpeed
+            }
+            speed
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.longPressSpeed fallback" }
+            speed
         }
-        return speed
     }
 
     @Keep
     @JvmStatic
     fun getOverrideSpeedArray(original: FloatArray): FloatArray {
-        return newSpeedArray.let { if (it.isNotEmpty()) it else original }
+        return try {
+            newSpeedArray.let { if (it.isNotEmpty()) it else original }
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.getOverrideSpeedArray fallback" }
+            original
+        }
     }
 
     @Keep
     @JvmStatic
     fun getOverrideReverseSpeedArray(original: FloatArray): FloatArray {
-        return newSpeedReversedArray.let { if (it.isNotEmpty()) it else original }
+        return try {
+            newSpeedReversedArray.let { if (it.isNotEmpty()) it else original }
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.getOverrideReverseSpeedArray fallback" }
+            original
+        }
     }
 
     @Keep
     @JvmStatic
     fun getOverrideSpeedArraySize(): Int {
-        return newSpeedArray.let { if (it.isNotEmpty()) it.size else 6 }
+        return try {
+            newSpeedArray.let { if (it.isNotEmpty()) it.size else 6 }
+        } catch (t: Throwable) {
+            Logger.error(t) { "PlaybackSpeedPatch.getOverrideSpeedArraySize fallback" }
+            6
+        }
     }
 
     @Keep
