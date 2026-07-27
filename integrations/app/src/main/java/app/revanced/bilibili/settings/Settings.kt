@@ -153,11 +153,11 @@ object Settings {
     @JvmField val BlockVideoComment = BooleanSetting(key = "block_video_comment")
     @JvmField val BlockUpRcmdAds = BooleanSetting(key = "block_up_rcmd_ads")
     @JvmField val BlockBangumiPageAds = BooleanSetting(key = "block_bangumi_page_ads")
+    @JvmField val RemoveRelateNothing =
+        BooleanSetting(key = "remove_video_relate_nothing", defValue = true)
     @JvmField val RemoveRelatePromote = BooleanSetting(key = "remove_video_relate_promote")
     @JvmField val RemoveRelateOnlyAv =
         BooleanSetting(key = "remove_video_relate_only_av", dependency = RemoveRelatePromote)
-    @JvmField val RemoveRelateNothing =
-        BooleanSetting(key = "remove_video_relate_nothing", dependency = RemoveRelateOnlyAv)
     @JvmField val RemoveRelateCharge = BooleanSetting("remove_video_relate_charge")
     @JvmField val DisableAutoSelect = BooleanSetting(key = "disable_auto_select")
     @JvmField val DisableAutoSubscribe = BooleanSetting(key = "disable_auto_subscribe")
@@ -202,7 +202,9 @@ object Settings {
 
     // region Group: 搜索页
     @JvmField @Deprecated("replaced by PurifySearchTypes") val PurifySearch = BooleanSetting(key = "purify_search")
-    @JvmField val PurifySearchTypes = StringSetSetting(key = "purify_search_types")
+    @JvmField val PurifySearchTypes =
+        StringSetSetting(key = "purify_search_types", defValue = setOf("trending", "recommend"))
+    @JvmField val LimitSearchResults = BooleanSetting(key = "limit_search_results_to_five", defValue = true)
     @JvmField val SearchBangumi = BooleanSetting(key = "search_area_bangumi")
     @JvmField val SearchMovie = BooleanSetting(key = "search_area_movie")
     @JvmField val FilterSearchType = StringSetSetting(key = "filter_search_type")

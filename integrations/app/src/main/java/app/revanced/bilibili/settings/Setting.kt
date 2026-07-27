@@ -94,6 +94,13 @@ sealed class Setting<out T : Any>(
 
         private fun migrate() {
             if (Utils.isMainProcess() &&
+                !prefs.getBoolean("search_page_filters_default_on_migrated", false)
+            ) prefs.edit(commit = true) {
+                val types = prefs.getStringSet("purify_search_types", emptySet()).orEmpty()
+                putStringSet("purify_search_types", types + setOf("trending", "recommend"))
+                putBoolean("search_page_filters_default_on_migrated", true)
+            }
+            if (Utils.isMainProcess() &&
                 (prefs.getBoolean("remove_video_cmd_dms", false)
                         || prefs.getBoolean("purify_search", false))
             ) prefs.edit(commit = true) {

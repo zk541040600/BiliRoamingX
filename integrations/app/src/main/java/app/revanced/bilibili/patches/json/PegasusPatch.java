@@ -1039,12 +1039,23 @@ public class PegasusPatch {
     }
 
     public static void filterRelatesFeed(RelatesFeedReply feedReply) {
+        if (Settings.RemoveRelateNothing.get()) {
+            feedReply.clearList();
+            feedReply.clearPagination();
+            feedReply.setHasNext(false);
+            return;
+        }
         List<Integer> indexes = getToRemoveRelateIndexes(feedReply.getListList());
         for (int i = indexes.size() - 1; i >= 0; i--)
             feedReply.removeList(indexes.get(i));
     }
 
     public static void filterRelatesFeedUnite(com.bapis.bilibili.app.viewunite.v1.RelatesFeedReply feedReply) {
+        if (Settings.RemoveRelateNothing.get()) {
+            feedReply.clearRelates();
+            feedReply.clearPagination();
+            return;
+        }
         List<Integer> indexes = getToRemoveRelateCardIndexes(feedReply.getRelatesList(), null);
         for (int i = indexes.size() - 1; i >= 0; i--)
             feedReply.removeRelates(indexes.get(i));

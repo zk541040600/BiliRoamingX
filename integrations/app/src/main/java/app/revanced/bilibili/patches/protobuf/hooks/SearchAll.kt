@@ -10,6 +10,8 @@ import com.bilibili.lib.moss.api.MossException
 import com.google.protobuf.GeneratedMessageLite
 
 object SearchAll : MossHook<SearchAllRequest, SearchAllResponse>() {
+    private const val MAX_SEARCH_RESULTS = 5
+
     private var cachedUpSet = emptySet<String>()
     private var cachedUpRegexes = emptyList<Regex>()
     private var cachedContentSet = emptySet<String>()
@@ -45,8 +47,25 @@ object SearchAll : MossHook<SearchAllRequest, SearchAllResponse>() {
         if (reply != null) {
             BangumiSeasonHook.addAreaTags(reply)
             filterSearchResult(reply)
+            limitSearchResults(req, reply)
         }
         return super.hookAfter(req, reply, error)
+    }
+
+    private fun limitSearchResults(req: SearchAllRequest, reply: SearchAllResponse) {
+        if (!Settings.LimitSearchResults()) return
+        if (req.pagination.next.isNotEmpty()) {
+            reply.clearItem()
+            reply.clearPagination()
+            return
+        }
+        var lowerItemCount = 0
+        val toRemoveIndexes = reply.itemList.mapIndexedNotNull { index, item ->
+            if (item.hasAuthor() || item.hasAuthorNew()) null
+            else if (++lowerItemCount > MAX_SEARCH_RESULTS) index else null
+        }
+        toRemoveIndexes.asReversed().forEach(reply::removeItem)
+        reply.clearPagination()
     }
 
     private fun filterSearchResult(reply: SearchAllResponse) {

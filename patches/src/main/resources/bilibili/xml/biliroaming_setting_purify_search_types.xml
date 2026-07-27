@@ -2,6 +2,7 @@
 <androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <app.revanced.bilibili.widget.CheckBoxGroupPreference
+        android:defaultValue="@array/biliroaming_purify_search_type_default_values"
         android:entries="@array/biliroaming_purify_search_type_entries"
         android:entryValues="@array/biliroaming_purify_search_type_values"
         android:key="purify_search_types"

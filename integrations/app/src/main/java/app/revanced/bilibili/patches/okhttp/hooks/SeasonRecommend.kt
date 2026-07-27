@@ -5,10 +5,11 @@ import app.revanced.bilibili.settings.Settings
 import app.revanced.bilibili.utils.isNullOrEmpty
 import app.revanced.bilibili.utils.iterator
 import app.revanced.bilibili.utils.toJSONObject
+import org.json.JSONArray
 
 object SeasonRecommend : ApiHook() {
     override fun shouldHook(url: String, status: Int): Boolean {
-        return Settings.RemoveRelatePromote()
+        return (Settings.RemoveRelateNothing() || Settings.RemoveRelatePromote())
                 && url.contains("/pgc/season/app/related/recommend")
                 && status.isOk
     }
@@ -17,6 +18,10 @@ object SeasonRecommend : ApiHook() {
         val json = response.toJSONObject()
         val result = json.optJSONObject("result")
             ?: return response
+        if (Settings.RemoveRelateNothing()) {
+            result.put("cards", JSONArray())
+            return json.toString()
+        }
         val cards = result.optJSONArray("cards")
         if (cards.isNullOrEmpty()) return response
         val it = cards.iterator()

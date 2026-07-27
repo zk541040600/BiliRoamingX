@@ -3,9 +3,17 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <androidx.preference.PreferenceCategory>
         <androidx.preference.SwitchPreferenceCompat
+            android:key="remove_video_relate_nothing"
+            android:defaultValue="true"
+            android:disableDependentsState="true"
+            android:summary="@string/biliroaming_rm_video_relate_nothing_summary"
+            android:title="@string/biliroaming_rm_video_relate_nothing_title" />
+        <androidx.preference.SwitchPreferenceCompat
+            android:dependency="remove_video_relate_nothing"
             android:key="remove_video_relate_charge"
             android:title="@string/biliroaming_rm_video_relate_charge_title" />
         <androidx.preference.SwitchPreferenceCompat
+            android:dependency="remove_video_relate_nothing"
             android:key="remove_video_relate_promote"
             android:summary="@string/biliroaming_rm_video_relate_promote_summary"
             android:title="@string/biliroaming_rm_video_relate_promote_title" />
@@ -14,11 +22,6 @@
             android:key="remove_video_relate_only_av"
             android:summary="@string/biliroaming_rm_video_relate_only_av_summary"
             android:title="@string/biliroaming_rm_video_relate_only_av_title" />
-        <androidx.preference.SwitchPreferenceCompat
-            android:dependency="remove_video_relate_only_av"
-            android:key="remove_video_relate_nothing"
-            android:summary="@string/biliroaming_rm_video_relate_nothing_summary"
-            android:title="@string/biliroaming_rm_video_relate_nothing_title" />
         <androidx.preference.Preference
             android:fragment="app.revanced.bilibili.settings.fragments.FilterHomeRcmdByKeywordFragment"
             android:key="relate_keyword_filter"

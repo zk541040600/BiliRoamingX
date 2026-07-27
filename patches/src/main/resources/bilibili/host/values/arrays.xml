@@ -519,4 +519,8 @@
         <item>trending</item>
         <item>recommend</item>
     </string-array>
+    <string-array name="biliroaming_purify_search_type_default_values">
+        <item>trending</item>
+        <item>recommend</item>
+    </string-array>
 </resources>

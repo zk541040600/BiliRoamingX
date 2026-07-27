@@ -12,7 +12,10 @@ import app.revanced.patches.bilibili.misc.protobuf.fingerprints.MossMiddlewareGa
 import app.revanced.patches.bilibili.misc.protobuf.fingerprints.MossServiceFingerprint
 import app.revanced.util.exception
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 @Patch(
     name = "Moss",
@@ -28,6 +31,36 @@ object MossPatch : BytecodePatch(setOf(MossServiceFingerprint, MossMiddlewareGai
         MossServiceFingerprint.result?.mutableClass?.methods?.let { methods ->
             methods.find { it.name == "blockingUnaryCall" }?.run {
                 val implementation = implementation ?: return@run
+
+                // Since 8.92.1, the KMP engine branch returns its response before reaching the
+                // legacy engine tail below. Hook that successful return explicitly as well.
+                val kmpInvokeIndex = implementation.instructions.indexOfFirst { instruction ->
+                    val reference = (instruction as? ReferenceInstruction)?.reference
+                            as? MethodReference
+                    reference?.definingClass == "Lcom/bilibili/lib/moss/api/KMossServiceImp;"
+                            && reference.name == "blockingUnaryCall"
+                }
+                if (kmpInvokeIndex != -1) {
+                    val moveResult = implementation.instructions.getOrNull(kmpInvokeIndex + 1)
+                            as? OneRegisterInstruction
+                        ?: throw MossServiceFingerprint.exception
+                    val returnInstruction = implementation.instructions.getOrNull(kmpInvokeIndex + 2)
+                            as? OneRegisterInstruction
+                        ?: throw MossServiceFingerprint.exception
+                    if (moveResult.opcode != Opcode.MOVE_RESULT_OBJECT
+                        || returnInstruction.opcode != Opcode.RETURN_OBJECT
+                        || moveResult.registerA != returnInstruction.registerA
+                    ) throw MossServiceFingerprint.exception
+                    val replyRegister = moveResult.registerA
+                    addInstructions(
+                        kmpInvokeIndex + 2,
+                        """
+                        invoke-static {p2, v$replyRegister}, Lapp/revanced/bilibili/patches/protobuf/MossPatch;->hookBlockingAfter(Lcom/google/protobuf/GeneratedMessageLite;Lcom/google/protobuf/GeneratedMessageLite;)Lcom/google/protobuf/GeneratedMessageLite;
+                        move-result-object v$replyRegister
+                        """.trimIndent()
+                    )
+                }
+
                 addInstructionsWithLabels(
                     0, """
                     invoke-static {p2}, Lapp/revanced/bilibili/patches/protobuf/MossPatch;->hookBlockingBefore(Lcom/google/protobuf/GeneratedMessageLite;)Ljava/lang/Object;
@@ -117,11 +150,13 @@ object MossPatch : BytecodePatch(setOf(MossServiceFingerprint, MossMiddlewareGai
             }
         } ?: throw MossServiceFingerprint.exception
         context.findClass("Lorg/chromium/net/impl/BidirectionalStreamBuilderImpl;")?.mutableClass?.run {
-            val urlField = fields.first { it.name == "mUrl" }
-            val requestHeadersField = fields.first { it.name == "mRequestHeaders" }
-            methods.first {
+            val urlField = fields.firstOrNull { it.name == "mUrl" }
+                ?: throw PatchException("not found BidirectionalStreamBuilderImpl.mUrl field")
+            val requestHeadersField = fields.firstOrNull { it.name == "mRequestHeaders" }
+                ?: throw PatchException("not found BidirectionalStreamBuilderImpl.mRequestHeaders field")
+            methods.firstOrNull {
                 it.returnType == "Lorg/chromium/net/ExperimentalBidirectionalStream;" && it.parameterTypes.isEmpty()
-            }.addInstructions(
+            }?.addInstructions(
                 0,
                 """
                 iget-object v0, p0, $urlField
@@ -130,7 +165,7 @@ object MossPatch : BytecodePatch(setOf(MossServiceFingerprint, MossMiddlewareGai
                 move-result-object v0
                 iput-object v0, p0, $urlField
             """.trimIndent()
-            )
-        } ?: throw PatchException("not found BidirectionalStreamBuilderImpl class")
+            ) ?: throw PatchException("not found BidirectionalStreamBuilderImpl.build method")
+        }
     }
 }

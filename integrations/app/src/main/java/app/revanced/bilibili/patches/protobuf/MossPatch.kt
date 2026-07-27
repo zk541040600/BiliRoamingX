@@ -118,6 +118,20 @@ object MossPatch {
     }
 
     /**
+     * Handles successful responses returned by the KMP Moss engine.
+     *
+     * Newer clients return directly from that branch, so the host bytecode patch calls this
+     * overload before the return instruction to keep the same post-processing as the legacy
+     * engine path.
+     */
+    @Keep
+    @JvmStatic
+    fun hookBlockingAfter(
+        req: GeneratedMessageLite<*, *>,
+        reply: GeneratedMessageLite<*, *>?
+    ): GeneratedMessageLite<*, *>? = hookBlockingAfter(req, reply, null)
+
+    /**
      * @return [HookFlags.STOP_EXECUTION] to stop method execution and return void,
      * or null to not intercept method execution,
      * or [handler], or a proxy handler like [MossResponseHandlerProxy].

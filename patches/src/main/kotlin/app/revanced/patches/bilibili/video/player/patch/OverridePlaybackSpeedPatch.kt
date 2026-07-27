@@ -64,17 +64,31 @@ object OverridePlaybackSpeedPatch : MultiMethodBytecodePatch(
                 m.implementation?.instructions?.indexOfFirst {
                     it.opcode == Opcode.CONST && it is WideLiteralInstruction && it.wideLiteral == 0x3ffeb852L // 1.99f
                 }?.takeIf { it != -1 }?.let { insertIndex ->
-                    val oneIndex = m.implementation!!.instructions.indexOfFirst {
-                        it.opcode == Opcode.CONST_HIGH16 && it is WideLiteralInstruction && it.wideLiteral == 0x3f800000L // 1.0f
-                    }
-                    Triple(m, insertIndex, oneIndex)
+                    val instructions = m.implementation!!.instructions
+                    val oneIndex = instructions.withIndex().firstOrNull { (index, instruction) ->
+                        index > insertIndex
+                                && instruction.opcode == Opcode.CONST_HIGH16
+                                && instruction is WideLiteralInstruction
+                                && instruction.wideLiteral == 0x3f800000L // 1.0f
+                    }?.index ?: throw PatchException("Retrieve 1.0f instruction from player speed widget failed")
+                    val twoRegister = instructions.subList(insertIndex, oneIndex)
+                        .firstNotNullOfOrNull {
+                            if (it.opcode == Opcode.CONST_HIGH16 && it is WideLiteralInstruction
+                                && it.wideLiteral == 0x40000000L // 2.0f
+                            ) (it as? OneRegisterInstruction)?.registerA else null
+                        } ?: throw PatchException("Retrieve 2.0f register from player speed widget failed")
+                    Triple(m, insertIndex, oneIndex to twoRegister)
                 }
             }
         }.ifEmpty {
             throw PlayerSpeedWidgetFingerprint.exception
-        }.forEach { (m, insertIndex, oneIndex) ->
+        }.forEach { (m, insertIndex, oneAndTwoRegister) ->
+            val (oneIndex, twoRegister) = oneAndTwoRegister
             m.addInstructionsWithLabels(
-                insertIndex, "goto :cmp_one",
+                insertIndex, """
+                const/high16 v$twoRegister, 0x40000000 # 2.0f
+                goto :cmp_one
+                """.trimIndent(),
                 ExternalLabel("cmp_one", m.getInstruction(oneIndex))
             )
         }

@@ -132,8 +132,14 @@ object ViewUniteReplyHook {
                     } else if (module.hasSectionData()) {
                         module.sectionData.episodesList.forEach { it.unlock() }
                     } else if (module.hasRelates()) {
-                        PegasusPatch.filterViewUniteRelates(module, viewReply.viewBase.bizType)
-                        BLRoutePatch.removePayloadUniteIfNeeded(module.relates.cardsList)
+                        if (Settings.RemoveRelateNothing()) {
+                            // Remove the whole oneof module. Clearing only its payload leaves an
+                            // empty shell which newer detail pages may refill or render oddly.
+                            toRemoveIndexes.add(index)
+                        } else {
+                            PegasusPatch.filterViewUniteRelates(module, viewReply.viewBase.bizType)
+                            BLRoutePatch.removePayloadUniteIfNeeded(module.relates.cardsList)
+                        }
                     } else if (module.hasCovenanter() || module.hasFollowLayer()) {
                         if (Settings.BlockFanGuide())
                             toRemoveIndexes.add(index)
